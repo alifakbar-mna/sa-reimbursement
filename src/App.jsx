@@ -77,6 +77,7 @@ export default function App() {
   };
 
   // 1. INPUT OLEH MAHASISWA
+  // 1. INPUT OLEH MAHASISWA
   const handleCreateSubmission = async (e) => {
     e.preventDefault();
     try {
@@ -89,8 +90,8 @@ export default function App() {
           cp_bph: newSubmission.cp_bph,
           nominal_pengajuan: parseFloat(newSubmission.nominal_pengajuan) || 0,
           status_proposal: 'On Progress',
-          is_cair: false,
-          revisions: [] 
+          is_cair: false
+          // Baris revisions: [] telah dihapus agar tidak memicu konflik skema
         }
       ]);
 

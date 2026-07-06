@@ -42,7 +42,6 @@ export default function App() {
       if (selectedItem.revisions && Array.isArray(selectedItem.revisions) && selectedItem.revisions.length > 0) {
         setRevisionList(selectedItem.revisions);
       } else {
-        // Jika belum ada data revisi sebelumnya, buat template baris kosong pertama
         setRevisionList([{ deadline: '', catatan: '' }]);
       }
     }
@@ -77,7 +76,7 @@ export default function App() {
     }
   };
 
-  // 1. INPUT OLEH MAHASISWA (OTOMATIS STATUS_PROPOSAL = 'On Progress')
+  // 1. INPUT OLEH MAHASISWA
   const handleCreateSubmission = async (e) => {
     e.preventDefault();
     try {
@@ -89,7 +88,7 @@ export default function App() {
           bph_kegiatan: newSubmission.bph_kegiatan,
           cp_bph: newSubmission.cp_bph,
           nominal_pengajuan: parseFloat(newSubmission.nominal_pengajuan) || 0,
-          status_proposal: 'On Progress', // Match dengan CHECK constraint database baru
+          status_proposal: 'On Progress',
           is_cair: false,
           revisions: [] 
         }
@@ -97,7 +96,6 @@ export default function App() {
 
       if (error) throw error;
       
-      // Reset form pengajuan bersih tanpa memunculkan alert notifikasi pop-up yang mengganggu
       setNewSubmission({ ormawa: '', nama_kegiatan: '', pic_pembina: '', bph_kegiatan: '', cp_bph: '', nominal_pengajuan: '' });
       fetchSubmissions();
     } catch (error) {
@@ -105,25 +103,22 @@ export default function App() {
     }
   };
 
-  // Fungsi dinamis menambah baris input revisi baru (+ button)
   const addRevisionRow = () => {
     setRevisionList([...revisionList, { deadline: '', catatan: '' }]);
   };
 
-  // Fungsi menghapus baris revisi tertentu
   const removeRevisionRow = (index) => {
     const updated = revisionList.filter((_, i) => i !== index);
     setRevisionList(updated.length > 0 ? updated : [{ deadline: '', catatan: '' }]);
   };
 
-  // Fungsi mengubah nilai di baris revisi tertentu
   const handleRevisionChange = (index, field, value) => {
     const updated = [...revisionList];
     updated[index][field] = value;
     setRevisionList(updated);
   };
 
-  // 2. TRIGGER WHATSAPP OTOMATIS SAAT ADA PERUBAHAN STATUS
+  // 2. TRIGGER WHATSAPP AUTOMATION
   const sendWhatsAppNotification = (item, updatedStatus, updatedRevisions) => {
     let phone = item.cp_bph.replace(/[^0-9]/g, '');
     if (phone.startsWith('0')) {
@@ -159,7 +154,7 @@ export default function App() {
     window.open(url, '_blank'); 
   };
 
-  // 3. SIMPAN PERUBAHAN OLEH KAK DINDA (SA)
+  // 3. SIMPAN PERUBAHAN OLEH SA
   const handleSaveChanges = async () => {
     if (!selectedItem) return;
 
@@ -182,9 +177,7 @@ export default function App() {
       if (error) throw error;
 
       alert('Data berhasil disimpan!');
-      
       sendWhatsAppNotification(selectedItem, selectedItem.status_proposal, validRevisions);
-      
       setSelectedItem(null);
       fetchSubmissions(); 
     } catch (error) {
@@ -197,6 +190,52 @@ export default function App() {
     return 'Rp ' + Number(num).toLocaleString('id-ID');
   };
 
+  // ==================== TAMPILAN PINTU GERBANG (LOGIN AWAL) ====================
+  if (userRole === null) {
+    return (
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-4">
+        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-xl max-w-md w-full text-center space-y-6">
+          <div>
+            <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg mx-auto shadow-md">SA</div>
+            <h2 className="text-xl font-bold text-gray-900 mt-4">SA Finance Gateway</h2>
+            <p className="text-xs text-gray-400 mt-1">Silakan pilih akses gerbang Anda untuk melanjutkan</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <button onClick={() => setUserRole('request')} className="py-3 border-2 border-gray-100 hover:border-indigo-600 rounded-xl font-medium text-sm text-gray-700 hover:text-indigo-600 transition-all bg-gray-50/50 hover:bg-indigo-50/20 text-left px-5 flex items-center justify-between">
+              <span>Masuk sebagai <strong>Mahasiswa</strong></span>
+              <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-md font-normal">Requestor</span>
+            </button>
+            <button onClick={() => setUserRole('sa')} className="py-3 border-2 border-gray-100 hover:border-indigo-600 rounded-xl font-medium text-sm text-gray-700 hover:text-indigo-600 transition-all bg-gray-50/50 hover:bg-indigo-50/20 text-left px-5 flex items-center justify-between">
+              <span>Masuk sebagai <strong>Kak Dinda</strong></span>
+              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-bold">Admin SA</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==================== SCREEN VALIDASI PASSWORD KAK DINDA ====================
+  if (userRole === 'sa' && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-4">
+        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-xl max-w-sm w-full space-y-4">
+          <button onClick={() => setUserRole(null)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">&larr; Kembali</button>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Otentikasi Internal SA</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Masukkan kunci akses finansial Student Affairs</p>
+          </div>
+          <form onSubmit={handleSALogin} className="space-y-3">
+            <input autoFocus type="password" placeholder="••••••••" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-indigo-600 font-mono tracking-widest text-center" />
+            {passwordError && <p className="text-[11px] text-red-500 text-center font-medium">Kunci akses salah. Periksa kembali token Anda.</p>}
+            <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-xl hover:bg-indigo-700 transition-colors shadow-xs">Validasi Akses</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ==================== TAMPILAN DASHBOARD UTAMA ====================
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#334155] font-sans antialiased">
       <header className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-xs">
@@ -297,7 +336,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* PANEL SLIDE-OVER KANAN (KHUSUS KAK DINDA - SA) */}
+      {/* PANEL SLIDE-OVER KANAN */}
       {selectedItem && userRole === 'sa' && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-gray-900/20 backdrop-blur-xs" onClick={() => setSelectedItem(null)} />
@@ -308,7 +347,6 @@ export default function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 text-xs">
-              {/* Tombol Opsi Status */}
               <div className="space-y-1.5">
                 <label className="font-bold text-gray-500 uppercase block">Ubah Status Berkas</label>
                 <div className="flex flex-wrap gap-2">
@@ -318,7 +356,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* INPUT MULTI-DEADLINE & CATATAN REVISI DINAMIS */}
               {selectedItem.status_proposal === 'Need Revision' && (
                 <div className="space-y-3 bg-amber-50/40 p-4 rounded-xl border border-amber-100">
                   <div className="flex justify-between items-center">

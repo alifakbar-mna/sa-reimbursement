@@ -10,7 +10,7 @@ export default function App() {
   const [passwordError, setPasswordError] = useState(false);
 
   // State Utama Data Finansial
-  const [activeTab, setActiveTab] = useState('on_progress'); // on_progress atau done
+  const [activeTab, setActiveTab] = useState('On Progress'); // 'On Progress' atau 'done'
   const [submissions, setSubmissions] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -89,9 +89,9 @@ export default function App() {
           bph_kegiatan: newSubmission.bph_kegiatan,
           cp_bph: newSubmission.cp_bph,
           nominal_pengajuan: parseFloat(newSubmission.nominal_pengajuan) || 0,
-          status_proposal: 'On Progress', // <-- SEKARANG OTOMATIS ON PROGRESS
+          status_proposal: 'On Progress', // Match dengan CHECK constraint database baru
           is_cair: false,
-          revisions: [] // Inisialisasi array kosong di database
+          revisions: [] 
         }
       ]);
 
@@ -125,13 +125,11 @@ export default function App() {
 
   // 2. TRIGGER WHATSAPP OTOMATIS SAAT ADA PERUBAHAN STATUS
   const sendWhatsAppNotification = (item, updatedStatus, updatedRevisions) => {
-    // Bersihkan format nomor WA agar kompatibel dengan API WhatsApp (contoh: 0812 -> 62812)
     let phone = item.cp_bph.replace(/[^0-9]/g, '');
     if (phone.startsWith('0')) {
       phone = '62' + phone.substring(1);
     }
 
-    // Bangun template isi pesan teks formal
     let message = `Halo ${item.bph_kegiatan} (${item.ormawa}),\n\n`;
     message += `Berikut adalah pembaruan status berkas untuk kegiatan *${item.nama_kegiatan}*:\n\n`;
     message += `*Status Terbaru:* _${updatedStatus}_\n`;
@@ -147,6 +145,8 @@ export default function App() {
           message += `${idx + 1}. Poin: ${rev.catatan || rev.catat}\n   Tenggat: *${rev.deadline || '—'}*\n`;
         }
       });
+    } else if (updatedStatus === 'On Progress') {
+      message += `\nBerkas pengajuan Anda sedang dalam proses peninjauan kembali (On Progress) oleh Student Affairs.\n`;
     } else if (updatedStatus === 'Diterima') {
       message += `\nSelamat! Berkas kamu telah disetujui oleh Student Affairs. Silakan memantau proses pencairan dana secara berkala.\n`;
     } else if (updatedStatus === 'Reject') {
@@ -155,9 +155,8 @@ export default function App() {
 
     message += `\nTerima kasih,\n*Student Affairs Finance Department*`;
 
-    // Encode text agar aman dibaca URL browser
     const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank'); // Otomatis membuka tab baru WhatsApp chat
+    window.open(url, '_blank'); 
   };
 
   // 3. SIMPAN PERUBAHAN OLEH KAK DINDA (SA)
@@ -165,7 +164,6 @@ export default function App() {
     if (!selectedItem) return;
 
     try {
-      // Filter list revisi agar hanya menyimpan data yang terisi lengkap saja
       const validRevisions = revisionList.filter(r => r.deadline !== '' || r.catatan !== '');
 
       const updates = {
@@ -173,7 +171,7 @@ export default function App() {
         nomor_rf: selectedItem.nomor_rf,
         is_cair: selectedItem.is_cair,
         tanggal_cair: selectedItem.is_cair ? new Date().toISOString() : null,
-        revisions: validRevisions // Simpan array objek revisi ke kolom jsonb/text Supabase
+        revisions: validRevisions 
       };
 
       const { error } = await supabase
@@ -185,11 +183,10 @@ export default function App() {
 
       alert('Data berhasil disimpan!');
       
-      // Jalankan sistem trigger otomatis buka chat WhatsApp ke mahasiswa target
       sendWhatsAppNotification(selectedItem, selectedItem.status_proposal, validRevisions);
       
       setSelectedItem(null);
-      fetchSubmissions(); // Refresh tabel
+      fetchSubmissions(); 
     } catch (error) {
       alert('Gagal menyimpan perubahan: ' + error.message);
     }
@@ -200,58 +197,6 @@ export default function App() {
     return 'Rp ' + Number(num).toLocaleString('id-ID');
   };
 
-  // ==========================================
-  // RENDER SCREEN 1: PILIH AKSES GATE
-  // ==========================================
-  if (!userRole) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-6 antialiased">
-        <div className="max-w-md w-full bg-white rounded-2xl border border-gray-200 shadow-xl p-8 text-center space-y-6">
-          <div>
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3 shadow-md shadow-indigo-100">SA</div>
-            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Monitoring & Request Dana</h2>
-            <p className="text-xs text-gray-400 mt-1">Silakan pilih akses masuk sistem keuangan ORMAWA</p>
-          </div>
-          <div className="flex flex-col gap-3 pt-2">
-            <button onClick={() => setUserRole('request')} className="w-full py-3 px-4 bg-white border border-gray-200 text-gray-700 font-medium text-sm rounded-xl hover:bg-gray-50 text-left flex justify-between items-center group">
-              <span>Masuk sebagai <strong>Mahasiswa (Request)</strong></span>
-              <span className="text-gray-400 group-hover:translate-x-1 transition-transform">&rarr;</span>
-            </button>
-            <button onClick={() => setUserRole('sa')} className="w-full py-3 px-4 bg-indigo-600 text-white font-medium text-sm rounded-xl hover:bg-indigo-700 text-left flex justify-between items-center group shadow-xs">
-              <span>Masuk sebagai <strong>Student Affairs (SA)</strong></span>
-              <span className="text-indigo-200 group-hover:translate-x-1 transition-transform">&rarr;</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ==========================================
-  // RENDER SCREEN 2: GATE KUNCI PASSWORD SA
-  // ==========================================
-  if (userRole === 'sa' && !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-6 antialiased">
-        <div className="max-w-sm w-full bg-white rounded-2xl border border-gray-200 shadow-xl p-8 space-y-5">
-          <button onClick={() => setUserRole(null)} className="text-xs font-medium text-gray-400 hover:text-gray-600">&larr; Kembali</button>
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Otentikasi Student Affairs</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Masukkan password khusus SA untuk mengelola berkas</p>
-          </div>
-          <form onSubmit={handleSALogin} className="space-y-4">
-            <input type="password" placeholder="Masukkan Password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className={`w-full text-sm border ${passwordError ? 'border-red-400 focus:ring-red-500' : 'border-gray-200 focus:ring-indigo-500'} rounded-xl p-3 focus:outline-hidden`} />
-            {passwordError && <p className="text-xs text-red-500 font-medium">⚠️ Password salah, akses ditolak.</p>}
-            <button type="submit" className="w-full py-3 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-black">Verifikasi & Masuk</button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // ==========================================
-  // RENDER SCREEN 3: UTAMA (DASHBOARD KEDUA ROLE)
-  // ==========================================
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#334155] font-sans antialiased">
       <header className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-xs">
@@ -303,7 +248,7 @@ export default function App() {
 
         <div className={`${userRole === 'request' ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-4`}>
           <div className="flex border-b border-gray-200 mb-2 gap-2">
-            <button onClick={() => setActiveTab('on_progress')} className={`px-5 py-2 font-medium text-sm border-b-2 ${activeTab === 'on_progress' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>On Progress</button>
+            <button onClick={() => setActiveTab('On Progress')} className={`px-5 py-2 font-medium text-sm border-b-2 ${activeTab === 'On Progress' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>On Progress</button>
             <button onClick={() => setActiveTab('done')} className={`px-5 py-2 font-medium text-sm border-b-2 ${activeTab === 'done' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>Done Pencairan</button>
           </div>
 
@@ -332,7 +277,8 @@ export default function App() {
                       <td className="px-4 py-3.5">
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                           item.status_proposal === 'Diterima' ? 'bg-[#E6F4EA] text-[#137333]' : 
-                          item.status_proposal === 'Need Revision' ? 'bg-[#FEF7E0] text-[#B06000]' : 'bg-[#FCE8E6] text-[#C5221F]'
+                          item.status_proposal === 'Need Revision' ? 'bg-[#FEF7E0] text-[#B06000]' : 
+                          item.status_proposal === 'On Progress' ? 'bg-[#E8F0FE] text-[#1A73E8]' : 'bg-[#FCE8E6] text-[#C5221F]'
                         }`}>
                           {item.status_proposal}
                         </span>
@@ -365,9 +311,9 @@ export default function App() {
               {/* Tombol Opsi Status */}
               <div className="space-y-1.5">
                 <label className="font-bold text-gray-500 uppercase block">Ubah Status Berkas</label>
-                <div className="flex gap-2">
-                  {['Diterima', 'Need Revision', 'Reject'].map((st) => (
-                    <button key={st} onClick={() => setSelectedItem({...selectedItem, status_proposal: st})} className={`flex-1 py-2 font-medium rounded-lg border text-center transition-all ${selectedItem.status_proposal === st ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-bold shadow-xs' : 'border-gray-200 text-gray-600'}`}>{st}</button>
+                <div className="flex flex-wrap gap-2">
+                  {['On Progress', 'Diterima', 'Need Revision', 'Reject'].map((st) => (
+                    <button key={st} onClick={() => setSelectedItem({...selectedItem, status_proposal: st})} className={`flex-1 min-w-[100px] py-2 font-medium rounded-lg border text-center transition-all ${selectedItem.status_proposal === st ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-bold shadow-xs' : 'border-gray-200 text-gray-600'}`}>{st}</button>
                   ))}
                 </div>
               </div>

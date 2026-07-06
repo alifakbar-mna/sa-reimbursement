@@ -133,13 +133,16 @@ export default function App() {
       message += `*Nomor RF (CIS):* ${item.nomor_rf}\n`;
     }
 
+    // Mengambil rincian detail deadline dan catatan revisi secara akurat
     if (updatedStatus === 'Need Revision' && updatedRevisions && updatedRevisions.length > 0) {
-      message += `\n*Daftar Catatan Revisi & Deadline:*\n`;
+      message += `\n*⚠️ DAFTAR CATATAN REVISI & DEADLINE:*\n`;
       updatedRevisions.forEach((rev, idx) => {
-        if (rev.catat || rev.catatan) {
-          message += `${idx + 1}. Poin: ${rev.catatan || rev.catat}\n   Tenggat: *${rev.deadline || '—'}*\n`;
-        }
+        const deskripsi = rev.catatan || rev.catat || 'Tidak ada deskripsi';
+        const tenggat = rev.deadline ? new Date(rev.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+        
+        message += `${idx + 1}. *Poin Revisi:* ${deskripsi}\n   *Tenggat Waktu (DL):* ${tenggat}\n\n`;
       });
+      message += `Mohon segera melakukan perbaikan berkas sebelum tenggat waktu yang ditentukan.`;
     } else if (updatedStatus === 'On Progress') {
       message += `\nBerkas pengajuan Anda sedang dalam proses peninjauan kembali (On Progress) oleh Student Affairs.\n`;
     } else if (updatedStatus === 'Diterima') {
@@ -148,7 +151,7 @@ export default function App() {
       message += `\nMohon maaf, berkas pengajuan Anda belum dapat kami setujui.\n`;
     }
 
-    message += `\nTerima kasih,\n*Student Affairs Finance Department*`;
+    message += `\n\nTerima kasih,\n*Student Affairs Finance Department*`;
 
     const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
     window.open(url, '_blank'); 

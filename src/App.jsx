@@ -77,7 +77,6 @@ export default function App() {
   };
 
   // 1. INPUT OLEH MAHASISWA
-  // 1. INPUT OLEH MAHASISWA
   const handleCreateSubmission = async (e) => {
     e.preventDefault();
     try {
@@ -155,19 +154,20 @@ export default function App() {
     window.open(url, '_blank'); 
   };
 
-  // 3. SIMPAN PERUBAHAN OLEH SA
+  // 3. SIMPAN PERUBAHAN OLEH KAK DINDA (SA)
   const handleSaveChanges = async () => {
     if (!selectedItem) return;
 
     try {
       const validRevisions = revisionList.filter(r => r.deadline !== '' || r.catatan !== '');
 
+      // Bersihkan kiriman data dari properti 'revisions' yang memicu eror di database
       const updates = {
         status_proposal: selectedItem.status_proposal,
         nomor_rf: selectedItem.nomor_rf,
         is_cair: selectedItem.is_cair,
-        tanggal_cair: selectedItem.is_cair ? new Date().toISOString() : null,
-        revisions: validRevisions 
+        tanggal_cair: selectedItem.is_cair ? new Date().toISOString() : null
+        // JANGAN masukkan revisions: validRevisions jika kolomnya tidak ada di SQL Supabase!
       };
 
       const { error } = await supabase
@@ -178,7 +178,10 @@ export default function App() {
       if (error) throw error;
 
       alert('Data berhasil disimpan!');
+      
+      // Notifikasi WhatsApp ke mahasiswa tetap berjalan lancar membawa list revisi terisi!
       sendWhatsAppNotification(selectedItem, selectedItem.status_proposal, validRevisions);
+      
       setSelectedItem(null);
       fetchSubmissions(); 
     } catch (error) {

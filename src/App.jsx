@@ -22,16 +22,14 @@ export default function App() {
     pic_pembina: '',
     bph_kegiatan: '',
     cp_bph: '',
-    nominal_pengajuan: '',
-    link_berkas: '' // Kolom pendukung link dokumen pengerjaan awal
+    nominal_pengajuan: ''
   });
 
   // State Form Edit Khusus Mahasiswa saat Revisi/Submit Ulang
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSubmission, setEditSubmission] = useState({
     nama_kegiatan: '',
-    nominal_pengajuan: '',
-    link_berkas: ''
+    nominal_pengajuan: ''
   });
 
   // State Array untuk Kelola UI Catatan Dinamis Kak Dinda
@@ -63,8 +61,7 @@ export default function App() {
       // Set data awal untuk form edit mahasiswa
       setEditSubmission({
         nama_kegiatan: selectedItem.nama_kegiatan || '',
-        nominal_pengajuan: selectedItem.nominal_pengajuan || '',
-        link_berkas: selectedItem.link_berkas || ''
+        nominal_pengajuan: selectedItem.nominal_pengajuan || ''
       });
     } else {
       setIsEditMode(false);
@@ -120,7 +117,6 @@ export default function App() {
           bph_kegiatan: newSubmission.bph_kegiatan,
           cp_bph: newSubmission.cp_bph,
           nominal_pengajuan: parseFloat(newSubmission.nominal_pengajuan) || 0,
-          link_berkas: newSubmission.link_berkas,
           status_proposal: 'On Progress',
           is_cair: false
         }
@@ -128,7 +124,7 @@ export default function App() {
 
       if (error) throw error;
       
-      setNewSubmission({ ormawa: '', nama_kegiatan: '', pic_pembina: '', bph_kegiatan: '', cp_bph: '', nominal_pengajuan: '', link_berkas: '' });
+      setNewSubmission({ ormawa: '', nama_kegiatan: '', pic_pembina: '', bph_kegiatan: '', cp_bph: '', nominal_pengajuan: '' });
       fetchSubmissions();
       alert('Pengajuan awal berhasil dikirim!');
     } catch (error) {
@@ -149,7 +145,6 @@ export default function App() {
       const updates = {
         nama_kegiatan: editSubmission.nama_kegiatan,
         nominal_pengajuan: parseFloat(editSubmission.nominal_pengajuan) || 0,
-        link_berkas: editSubmission.link_berkas,
         status_proposal: 'On Progress',
         catatan_revisi: null,
         deadline_revisi: null
@@ -168,7 +163,7 @@ export default function App() {
         .insert([
           { 
             submission_id: selectedItem.id, 
-            note: `Submit Ke-${nextSubmitNumber}: Berkas perbaikan & data baru telah diperbarui oleh Mahasiswa` 
+            note: `Submit Ke-${nextSubmitNumber}: Berkas perbaikan & pembaruan data dikirim kembali oleh Mahasiswa` 
           }
         ]);
 
@@ -223,7 +218,7 @@ export default function App() {
         const tenggat = rev.deadline ? new Date(rev.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
         message += `${idx + 1}. *Poin Revisi:* ${deskripsi}\n   *Tenggat Waktu (DL):* ${tenggat}\n\n`;
       });
-      message += `Silakan buka dashboard website untuk mengedit data dan melakukan *Submit Ulang* berkas perbaikan Anda.`;
+      message += `Silakan buka dashboard website untuk melakukan penyesuaian data dan *Submit Ulang* berkas perbaikan Anda.`;
     } else if (updatedStatus === 'On Progress') {
       message += `\nBerkas pengajuan Anda sedang dalam proses peninjauan kembali oleh Student Affairs.\n`;
     } else if (updatedStatus === 'Diterima') {
@@ -379,10 +374,6 @@ export default function App() {
                 <label className="text-xs text-gray-400 block mb-1">Nominal Dana</label>
                 <input required type="number" placeholder="Rp" value={newSubmission.nominal_pengajuan} onChange={(e) => setNewSubmission({...newSubmission, nominal_pengajuan: e.target.value})} className="w-full border border-gray-200 rounded-lg p-2 text-xs" />
               </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Link Tautan Berkas (Google Drive/OneDrive)</label>
-                <input required type="url" placeholder="https://drive.google.com/..." value={newSubmission.link_berkas} onChange={(e) => setNewSubmission({...newSubmission, link_berkas: e.target.value})} className="w-full border border-gray-200 rounded-lg p-2 text-xs" />
-              </div>
               <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 transition-colors shadow-xs">Kirim Berkas</button>
             </form>
           </div>
@@ -455,9 +446,6 @@ export default function App() {
               <span className="text-xs font-bold text-gray-400 uppercase">{selectedItem.ormawa}</span>
               <h3 className="text-base font-semibold text-gray-900">{selectedItem.nama_kegiatan}</h3>
               <p className="text-[11px] text-gray-400 mt-0.5">PIC: {selectedItem.bph_kegiatan} ({selectedItem.cp_bph})</p>
-              {selectedItem.link_berkas && (
-                <a href={selectedItem.link_berkas} target="_blank" rel="noreferrer" className="inline-block mt-2 text-xs bg-indigo-50 text-indigo-600 font-bold px-2 py-1 rounded hover:bg-indigo-100">🔗 Buka Tautan Berkas Dokumen</a>
-              )}
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 text-xs">
@@ -519,6 +507,10 @@ export default function App() {
                       <span className="text-xs font-bold text-gray-800">{selectedItem.status_proposal}</span>
                     </div>
                     <div>
+                      <span className="text-gray-400 block uppercase font-bold text-[10px]">Nominal Dana Saat Ini</span>
+                      <span className="text-xs font-mono font-bold text-gray-800">{formatRupiah(selectedItem.nominal_pengajuan)}</span>
+                    </div>
+                    <div>
                       <span className="text-gray-400 block uppercase font-bold text-[10px]">Nomor RF (CIS)</span>
                       <span className="text-xs font-mono text-gray-700">{selectedItem.nomor_rf || 'Belum Diterbitkan'}</span>
                     </div>
@@ -534,10 +526,10 @@ export default function App() {
                         {/* TOGGLE TOMBOL EDIT BERKAS MAHASISWA */}
                         {!isEditMode ? (
                           <button onClick={() => setIsEditMode(true)} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors text-center">
-                            ✏️ Edit Data & Masukkan Berkas Baru
+                            ✏️ Edit Data & Siapkan Submit Ulang
                           </button>
                         ) : (
-                          /* FORM FORMULIR EDIT JIKA MODE EDIT AKTIF */
+                          /* FORMULIR EDIT JIKA MODE EDIT AKTIF */
                           <form onSubmit={handleResubmitSubmission} className="bg-white border border-amber-200 rounded-xl p-4 space-y-3 text-left">
                             <div className="flex justify-between items-center border-b pb-1.5">
                               <span className="font-bold text-gray-700">Form Perubahan Berkas Perbaikan</span>
@@ -548,15 +540,11 @@ export default function App() {
                               <input required type="text" value={editSubmission.nama_kegiatan} onChange={(e) => setEditSubmission({...editSubmission, nama_kegiatan: e.target.value})} className="w-full border p-1.5 text-xs rounded" />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-400 block mb-1">Nominal Pengajuan Dana</label>
+                              <label className="text-[10px] text-gray-400 block mb-1">Nominal Pengajuan Dana Baru</label>
                               <input required type="number" value={editSubmission.nominal_pengajuan} onChange={(e) => setEditSubmission({...editSubmission, nominal_pengajuan: e.target.value})} className="w-full border p-1.5 text-xs rounded" />
                             </div>
-                            <div>
-                              <label className="text-[10px] text-gray-400 block mb-1">Tautan Link Berkas Baru (Google Drive Perbaikan)</label>
-                              <input required type="url" value={editSubmission.link_berkas} onChange={(e) => setEditSubmission({...editSubmission, link_berkas: e.target.value})} placeholder="https://drive.google.com/..." className="w-full border p-1.5 text-xs rounded font-mono" />
-                            </div>
-                            <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors">
-                              🚀 Kirim Perbaikan & Submit Ulang Berkas
+                            <button type="submit" className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors">
+                              🚀 Saya Sudah Memperbaiki Berkas (Submit Ulang)
                             </button>
                           </form>
                         )}

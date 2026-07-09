@@ -25,50 +25,48 @@ export default function App() {
     nominal_pengajuan: ''
   });
 
-  // State Form Edit Khusus Mahasiswa saat Revisi/Submit Ulang
+  // State Form Edit Khusus Mahasiswa saat Revisi/Submit Ulang Per Poin DL
   const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedRevisionId, setSelectedRevisionId] = useState('');
   const [editSubmission, setEditSubmission] = useState({
     nama_kegiatan: '',
     nominal_pengajuan: ''
   });
 
   // State Array untuk Kelola UI Catatan Dinamis Kak Dinda
-  const [revisionList, setRevisionList] = useState([{ deadline: '', catatan: '' }]);
+  const [revisionList, setRevisionList] = useState([{ id: 'rev_1', deadline: '', catatan: '', status: 'Pending' }]);
 
   useEffect(() => {
-    if (userRole === 'sa' && isAuthenticated) {
-      fetchSubmissions();
-    } else if (userRole === 'request') {
-      fetchSubmissions();
-    }
+    fetchSubmissions();
   }, [activeTab, userRole, isAuthenticated]);
 
   // Sinkronisasi data saat item dipilih (baik untuk Kak Dinda maupun Mode Edit Mahasiswa)
   useEffect(() => {
     if (selectedItem) {
-      // Set data untuk Kak Dinda
+      // Parsing data catatan_revisi format JSON jika ada
       if (selectedItem.catatan_revisi) {
-        setRevisionList([
-          { 
-            deadline: selectedItem.deadline_revisi || '', 
-            catatan: selectedItem.catatan_revisi 
-          }
-        ]);
+        try {
+          const parsed = typeof selectedItem.catatan_revisi === 'string' 
+            ? JSON.parse(selectedItem.catatan_revisi) 
+            : selectedItem.catatan_revisi;
+          setRevisionList(Array.isArray(parsed) ? parsed : [{ id: 'rev_' + Date.now(), deadline: selectedItem.deadline_revisi || '', catatan: selectedItem.catatan_revisi, status: 'Pending' }]);
+        } catch (e) {
+          setRevisionList([{ id: 'rev_' + Date.now(), deadline: selectedItem.deadline_revisi || '', catatan: selectedItem.catatan_revisi, status: 'Pending' }]);
+        }
       } else {
-        setRevisionList([{ deadline: '', catatan: '' }]);
+        setRevisionList([{ id: 'rev_' + Date.now(), deadline: '', catatan: '', status: 'Pending' }]);
       }
 
-      // Set data awal untuk form edit mahasiswa
       setEditSubmission({
         nama_kegiatan: selectedItem.nama_kegiatan || '',
         nominal_pengajuan: selectedItem.nominal_pengajuan || ''
       });
     } else {
       setIsEditMode(false);
+      setSelectedRevisionId('');
     }
   }, [selectedItem]);
 
-  // Fetch data dengan join relasi tabel riwayat submission_logs
   const fetchSubmissions = async () => {
     setLoading(true);
     try {
@@ -105,7 +103,6 @@ export default function App() {
     }
   };
 
-  // 1. INPUT BERKAS AWAL OLEH MAHASISWA
   const handleCreateSubmission = async (e) => {
     e.preventDefault();
     try {
@@ -118,12 +115,12 @@ export default function App() {
           cp_bph: newSubmission.cp_bph,
           nominal_pengajuan: parseFloat(newSubmission.nominal_pengajuan) || 0,
           status_proposal: 'On Progress',
-          is_cair: false
+          is_cair: false,
+          catatan_revisi: null
         }
       ]);
 
       if (error) throw error;
-      
       setNewSubmission({ ormawa: '', nama_kegiatan: '', pic_pembina: '', bph_kegiatan: '', cp_bph: '', nominal_pengajuan: '' });
       fetchSubmissions();
       alert('Pengajuan awal berhasil dikirim!');
@@ -132,22 +129,32 @@ export default function App() {
     }
   };
 
-  // 2. FITUR EDIT & SUBMIT ULANG (RESUBMIT) OLEH MAHASISWA SETELAH REVISI Selesai
+  // FITUR RESUBMIT PER POIN DEADLINE / REVISI YANG DIPILIH
   const handleResubmitSubmission = async (e) => {
     e.preventDefault();
-    if (!selectedItem) return;
+    if (!selectedItem || !selectedRevisionId) return;
 
     try {
       const currentSubmitCount = selectedItem.submission_logs ? selectedItem.submission_logs.length : 1;
       const nextSubmitNumber = currentSubmitCount + 1;
 
-      // Update data isi berkas terbaru, kembalikan status ke 'On Progress', & bersihkan catatan revisi lama
+      // Update status poin revisi spesifik yang disubmit mahasiswa menjadi 'Submited'
+      const updatedRevisions = revisionList.map(rev => {
+        if (rev.id === selectedRevisionId) {
+          return { ...rev, status: 'Submited' };
+        }
+        return rev;
+      });
+
+      // Periksa apakah masih ada poin revisi lain yang masih berstatus 'Pending'
+      const hasPendingRevisions = updatedRevisions.some(r => r.status === 'Pending');
+
       const updates = {
         nama_kegiatan: editSubmission.nama_kegiatan,
         nominal_pengajuan: parseFloat(editSubmission.nominal_pengajuan) || 0,
-        status_proposal: 'On Progress',
-        catatan_revisi: null,
-        deadline_revisi: null
+        // Status berkas utama kembali ke On Progress jika semua poin revisi yang ada sudah di-submit ulang
+        status_proposal: hasPendingRevisions ? 'Need Revision' : 'On Progress',
+        catatan_revisi: JSON.stringify(updatedRevisions)
       };
 
       const { error: updateError } = await supabase
@@ -157,20 +164,19 @@ export default function App() {
 
       if (updateError) throw updateError;
 
-      // Catat log pengerjaan submit ulang ke tabel submission_logs
-      const { error: logError } = await supabase
+      const targetRev = revisionList.find(r => r.id === selectedRevisionId);
+      await supabase
         .from('submission_logs')
         .insert([
           { 
             submission_id: selectedItem.id, 
-            note: `Submit Ke-${nextSubmitNumber}: Berkas perbaikan & pembaruan data dikirim kembali oleh Mahasiswa` 
+            note: `Submit Ke-${nextSubmitNumber}: Mahasiswa menyelesaikan poin revisi ("${targetRev?.catatan?.substring(0, 30)}...")` 
           }
         ]);
 
-      if (logError) throw logError;
-
-      alert(`Berkas berhasil diperbarui dan di-submit ulang sebagai pengajuan ke-${nextSubmitNumber}!`);
+      alert(`Poin perbaikan berhasil dikirim sebagai pengajuan ke-${nextSubmitNumber}!`);
       setIsEditMode(false);
+      setSelectedRevisionId('');
       setSelectedItem(null);
       fetchSubmissions();
     } catch (error) {
@@ -179,12 +185,12 @@ export default function App() {
   };
 
   const addRevisionRow = () => {
-    setRevisionList([...revisionList, { deadline: '', catatan: '' }]);
+    setRevisionList([...revisionList, { id: 'rev_' + Date.now(), deadline: '', catatan: '', status: 'Pending' }]);
   };
 
   const removeRevisionRow = (index) => {
     const updated = revisionList.filter((_, i) => i !== index);
-    setRevisionList(updated.length > 0 ? updated : [{ deadline: '', catatan: '' }]);
+    setRevisionList(updated.length > 0 ? updated : [{ id: 'rev_' + Date.now(), deadline: '', catatan: '', status: 'Pending' }]);
   };
 
   const handleRevisionChange = (index, field, value) => {
@@ -193,7 +199,27 @@ export default function App() {
     setRevisionList(updated);
   };
 
-  // 3. TRIGGER AUTOMATION WHATSAPP DENGAN URUTAN SUBMIT
+  // INDIKATOR WARNA BERDASARKAN SISA HARI DEADLINE
+  const getDeadlineAlertClass = (deadlineStr, status) => {
+    if (!deadlineStr || status === 'Submited') return 'bg-white border-gray-200';
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const dlDate = new Date(deadlineStr);
+    dlDate.setHours(0,0,0,0);
+    
+    const timeDiff = dlDate.getTime() - today.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    if (daysDiff < 0) {
+      return 'bg-red-50 border-red-300 text-red-900 animate-pulse'; // Lewat deadline (Merah)
+    } else if (daysDiff <= 1) {
+      return 'bg-amber-50 border-amber-300 text-amber-900'; // Kurang atau sama dengan 1 hari (Kuning)
+    }
+    return 'bg-white border-gray-200';
+  };
+
+  // AUTOMATION WHATSAPP DENGAN PERBAIKAN FORMAT INDENTASI BARIS BARU (ENTER)
   const sendWhatsAppNotification = (item, updatedStatus, updatedRevisions) => {
     let phone = item.cp_bph.replace(/[^0-9]/g, '');
     if (phone.startsWith('0')) {
@@ -214,9 +240,17 @@ export default function App() {
     if (updatedStatus === 'Need Revision' && updatedRevisions && updatedRevisions.length > 0) {
       message += `\n*⚠️ DAFTAR CATATAN REVISI & DEADLINE:*\n`;
       updatedRevisions.forEach((rev, idx) => {
-        const deskripsi = rev.catatan || 'Tidak ada deskripsi';
+        // Merapikan baris baru (enter) agar setiap baris teks tambahan sejajar rapi di WhatsApp
+        const deskripsiMentah = rev.catatan || 'Tidak ada deskripsi';
+        const deskripsiRapi = deskripsiMentah.split('\n').map((line, lIdx) => {
+          return lIdx === 0 ? line : `               ${line}`;
+        }).join('\n');
+
         const tenggat = rev.deadline ? new Date(rev.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-        message += `${idx + 1}. *Poin Revisi:* ${deskripsi}\n   *Tenggat Waktu (DL):* ${tenggat}\n\n`;
+        
+        message += `${idx + 1}. *Poin Revisi:* ${deskripsiRapi}\n`;
+        message += `   *Tenggat Waktu (DL):* ${tenggat}\n`;
+        message += `   *Status Poin:* _${rev.status || 'Pending'}_\n\n`;
       });
       message += `Silakan buka dashboard website untuk melakukan penyesuaian data dan *Submit Ulang* berkas perbaikan Anda.`;
     } else if (updatedStatus === 'On Progress') {
@@ -227,19 +261,17 @@ export default function App() {
       message += `\nMohon maaf, berkas pengajuan Anda belum dapat kami setujui.\n`;
     }
 
-    message += `\n\nTerima kasih,\n*Student Affairs Finance Department*`;
+    message += `\n\nTerima kasih,\n*Student Affairs Department*`; // Nama departemen diperbarui sesuai request
 
     const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
     window.open(url, '_blank'); 
   };
 
-  // 4. SIMPAN PERUBAHAN & UPDATE LOG STATUS OLEH KAK DINDA (SA)
   const handleSaveChanges = async () => {
     if (!selectedItem) return;
 
     try {
       const validRevisions = revisionList.filter(r => r.deadline !== '' || r.catatan !== '');
-      const catatanGabungan = validRevisions.map(r => r.catatan).join('; ');
       const deadlineUtama = validRevisions[0]?.deadline || null;
 
       const updates = {
@@ -247,7 +279,8 @@ export default function App() {
         nomor_rf: selectedItem.nomor_rf,
         is_cair: selectedItem.is_cair,
         tanggal_cair: selectedItem.is_cair ? new Date().toISOString() : null,
-        catatan_revisi: selectedItem.status_proposal === 'Need Revision' ? catatanGabungan : null,
+        // Menyimpan array objek revisi dinamis ke kolom teks berbentuk string JSON
+        catatan_revisi: selectedItem.status_proposal === 'Need Revision' ? JSON.stringify(validRevisions) : null,
         deadline_revisi: selectedItem.status_proposal === 'Need Revision' ? deadlineUtama : null
       };
 
@@ -258,10 +291,9 @@ export default function App() {
 
       if (updateError) throw updateError;
 
-      // Catat log riwayat peninjauan status
       let logNote = `Status berkas diperbarui menjadi [${selectedItem.status_proposal}]`;
       if (selectedItem.status_proposal === 'Need Revision') {
-        logNote = `Need Revision: Catatan dikirim ke mahasiswa (${catatanGabungan || 'Ada revisi'})`;
+        logNote = `Need Revision: ${validRevisions.length} instruksi tenggat waktu dikirim ke mahasiswa`;
       } else if (selectedItem.is_cair) {
         logNote = `Done: Dana berhasil dicairkan`;
       }
@@ -284,7 +316,7 @@ export default function App() {
     return 'Rp ' + Number(num).toLocaleString('id-ID');
   };
 
-  // ==================== TAMPILAN PINTU GERBANG (LOGIN AWAL) ====================
+  // ==================== GATEWAY & LOGIN RENDER ====================
   if (userRole === null) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-4">
@@ -292,7 +324,6 @@ export default function App() {
           <div>
             <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg mx-auto shadow-md">SA</div>
             <h2 className="text-xl font-bold text-gray-900 mt-4">SA Finance Gateway</h2>
-            <p className="text-xs text-gray-400 mt-1">Silakan pilih akses gerbang Anda untuk melanjutkan</p>
           </div>
           <div className="grid grid-cols-1 gap-3">
             <button onClick={() => setUserRole('request')} className="py-3 border-2 border-gray-100 hover:border-indigo-600 rounded-xl font-medium text-sm text-gray-700 hover:text-indigo-600 transition-all bg-gray-50/50 hover:bg-indigo-50/20 text-left px-5 flex items-center justify-between">
@@ -309,7 +340,6 @@ export default function App() {
     );
   }
 
-  // ==================== SCREEN VALIDASI PASSWORD KAK DINDA ====================
   if (userRole === 'sa' && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-4">
@@ -317,19 +347,17 @@ export default function App() {
           <button onClick={() => setUserRole(null)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">&larr; Kembali</button>
           <div>
             <h3 className="text-lg font-bold text-gray-900">Otentikasi Internal SA</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Masukkan kunci akses finansial Student Affairs</p>
           </div>
           <form onSubmit={handleSALogin} className="space-y-3">
             <input autoFocus type="password" placeholder="••••••••" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-indigo-600 font-mono tracking-widest text-center" />
-            {passwordError && <p className="text-[11px] text-red-500 text-center font-medium">Kunci akses salah. Periksa kembali token Anda.</p>}
-            <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-xl hover:bg-indigo-700 transition-colors shadow-xs">Validasi Akses</button>
+            {passwordError && <p className="text-[11px] text-red-500 text-center font-medium">Kunci akses salah.</p>}
+            <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-xl hover:bg-indigo-700 transition-colors">Validasi Akses</button>
           </form>
         </div>
       </div>
     );
   }
 
-  // ==================== TAMPILAN DASHBOARD UTAMA ====================
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#334155] font-sans antialiased">
       <header className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-xs">
@@ -425,10 +453,12 @@ export default function App() {
                         <td className="px-4 py-3.5 font-mono text-gray-400">{item.nomor_rf || '—'}</td>
                         <td className="px-4 py-3.5 text-right space-x-1.5">
                           <button onClick={() => setSelectedItem(item)} className="text-indigo-600 hover:text-indigo-900 font-bold bg-indigo-50 px-2 py-1 rounded">Detail</button>
-                          
-                          {/* TOMBOL WA HANYA MUNCUL JIKA USER ADALAH KAK DINDA (SA) */}
                           {userRole === 'sa' && (
-                            <button onClick={() => sendWhatsAppNotification(item, item.status_proposal, [{ catatan: item.catatan_revisi, deadline: item.deadline_revisi }])} className="text-emerald-600 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-1 rounded">💬 WA</button>
+                            <button onClick={() => {
+                              let list = [{ deadline: '', catatan: '', status: 'Pending' }];
+                              try { if(item.catatan_revisi) list = JSON.parse(item.catatan_revisi); } catch(e){}
+                              sendWhatsAppNotification(item, item.status_proposal, list);
+                            }} className="text-emerald-600 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-1 rounded">💬 WA</button>
                           )}
                         </td>
                       </tr>
@@ -441,7 +471,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* PANEL SLIDE-OVER KANAN (Bisa Diakses Mahasiswa & Kak Dinda) */}
+      {/* PANEL DETAIL (SLIDE-OVER KANAN) */}
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-gray-900/20 backdrop-blur-xs" onClick={() => { setSelectedItem(null); setIsEditMode(false); }} />
@@ -453,7 +483,7 @@ export default function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 text-xs">
-              {/* JIKA USER ADALAH KAK DINDA (SA) -> VIEW EDITABLE STATUS */}
+              {/* INTERFACE KAK DINDA */}
               {userRole === 'sa' ? (
                 <>
                   <div className="space-y-1.5">
@@ -466,26 +496,29 @@ export default function App() {
                   </div>
 
                   {selectedItem.status_proposal === 'Need Revision' && (
-                    <div className="space-y-3 bg-amber-50/40 p-4 rounded-xl border border-amber-100">
-                      <label className="font-bold text-amber-800 uppercase block">Daftar Poin Catatan Revisi</label>
+                    <div className="space-y-3 bg-slate-50 p-4 rounded-xl border">
+                      <label className="font-bold text-gray-700 uppercase block">Daftar Poin Catatan Revisi & Deadline</label>
                       {revisionList.map((rev, index) => (
-                        <div key={index} className="p-3 bg-white border border-amber-200 rounded-lg space-y-2 relative shadow-xs">
+                        <div key={rev.id || index} className={`p-3 border rounded-lg space-y-2 relative shadow-xs transition-colors ${getDeadlineAlertClass(rev.deadline, rev.status)}`}>
                           <div className="flex gap-2">
                             <div className="flex-1">
                               <label className="text-[10px] text-gray-400 block mb-0.5">Tenggat Waktu (Deadline)</label>
-                              <input type="date" value={rev.deadline || ''} onChange={(e) => handleRevisionChange(index, 'deadline', e.target.value)} className="w-full border border-gray-200 rounded-md p-1.5 text-xs" />
+                              <input type="date" value={rev.deadline || ''} onChange={(e) => handleRevisionChange(index, 'deadline', e.target.value)} className="w-full border border-gray-200 rounded-md p-1.5 text-xs text-gray-800" />
+                            </div>
+                            <div className="text-right">
+                              <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full ${rev.status === 'Submited' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{rev.status || 'Pending'}</span>
                             </div>
                             {revisionList.length > 1 && (
-                              <button onClick={() => removeRevisionRow(index)} className="text-red-500 hover:text-red-700 font-bold self-end px-2 py-1">&times;</button>
+                              <button onClick={() => removeRevisionRow(index)} className="text-red-500 hover:text-red-700 font-bold self-end px-1">&times;</button>
                             )}
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-400 block mb-0.5">Deskripsi Bagian Yang Direvisi</label>
-                            <textarea rows="2" placeholder="Contoh: Rincian nota konsumsi di lampiran 3 belum dicap basah." value={rev.catatan || ''} onChange={(e) => handleRevisionChange(index, 'catatan', e.target.value)} className="w-full border border-gray-200 rounded-md p-1.5 text-xs focus:outline-hidden" />
+                            <label className="text-[10px] text-gray-400 block mb-0.5">Deskripsi Bagian Yang Direvisi (Mendukung Enter)</label>
+                            <textarea rows="3" placeholder="Gunakan enter untuk baris baru jika poinnya banyak..." value={rev.catatan || ''} onChange={(e) => handleRevisionChange(index, 'catatan', e.target.value)} className="w-full border border-gray-200 rounded-md p-1.5 text-xs text-gray-800 focus:outline-hidden" />
                           </div>
                         </div>
                       ))}
-                      <button type="button" onClick={addRevisionRow} className="w-full py-2 bg-amber-600/10 hover:bg-amber-600/20 text-amber-800 font-semibold text-xs rounded-lg transition-colors">+ Tambah Poin Catatan Baru</button>
+                      <button type="button" onClick={addRevisionRow} className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-lg transition-colors">+ Tambah Poin Catatan/DL Baru</button>
                     </div>
                   )}
 
@@ -498,12 +531,11 @@ export default function App() {
                     <input type="checkbox" id="is_cair" checked={selectedItem.is_cair || false} onChange={(e) => setSelectedItem({...selectedItem, is_cair: e.target.checked})} className="mt-0.5" />
                     <label htmlFor="is_cair" className="text-[11px] text-emerald-800">
                       <strong>Sudah Dicairkan ke Mahasiswa</strong>
-                      <span className="block text-gray-400 mt-0.5">Mencentang ini otomatis memindahkan data ke tab "Done Pencairan"</span>
                     </label>
                   </div>
                 </>
               ) : (
-                /* JIKA USER ADALAH MAHASISWA -> VIEW DATA / FORM EDIT SUBMIT ULANG */
+                /* INTERFACE MAHASISWA */
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
                     <div>
@@ -514,30 +546,36 @@ export default function App() {
                       <span className="text-gray-400 block uppercase font-bold text-[10px]">Nominal Dana Saat Ini</span>
                       <span className="text-xs font-mono font-bold text-gray-800">{formatRupiah(selectedItem.nominal_pengajuan)}</span>
                     </div>
-                    <div>
-                      <span className="text-gray-400 block uppercase font-bold text-[10px]">Nomor RF (CIS)</span>
-                      <span className="text-xs font-mono text-gray-700">{selectedItem.nomor_rf || 'Belum Diterbitkan'}</span>
-                    </div>
 
                     {selectedItem.status_proposal === 'Need Revision' && (
                       <div className="mt-2 pt-3 border-t border-gray-200 space-y-3">
-                        <span className="text-amber-800 block uppercase font-bold text-[10px] tracking-wide">⚠️ Detail Instruksi Perbaikan Dari Kak Dinda:</span>
-                        <div className="p-3 bg-white border border-amber-100 rounded-lg">
-                          <p className="font-medium text-gray-800">📌 {selectedItem.catatan_revisi || 'Ada revisi pada berkas berkas'}</p>
-                          <p className="text-[11px] text-red-600 mt-2 font-bold">⏳ Batas Tenggat: {selectedItem.deadline_revisi ? new Date(selectedItem.deadline_revisi).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
-                        </div>
+                        <span className="text-slate-700 block uppercase font-bold text-[10px] tracking-wide">📌 Daftar Instruksi Perbaikan Dari Kak Dinda:</span>
                         
-                        {/* TOGGLE TOMBOL EDIT BERKAS MAHASISWA */}
-                        {!isEditMode ? (
-                          <button onClick={() => setIsEditMode(true)} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors text-center">
-                            ✏️ Edit Data & Siapkan Submit Ulang
-                          </button>
-                        ) : (
-                          /* FORMULIR EDIT JIKA MODE EDIT AKTIF */
-                          <form onSubmit={handleResubmitSubmission} className="bg-white border border-amber-200 rounded-xl p-4 space-y-3 text-left">
+                        <div className="space-y-2.5">
+                          {revisionList.map((rev) => (
+                            <div key={rev.id} className={`p-3 border rounded-lg shadow-xs flex flex-col space-y-2 ${getDeadlineAlertClass(rev.deadline, rev.status)}`}>
+                              <div className="flex justify-between items-start border-b pb-1">
+                                <span className="font-bold text-gray-500 text-[10px]">Tenggat: {rev.deadline ? new Date(rev.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${rev.status === 'Submited' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{rev.status || 'Pending'}</span>
+                              </div>
+                              <p className="whitespace-pre-line text-gray-800 font-medium">
+                                {rev.catatan || 'Ada revisi pada berkas.'}
+                              </p>
+                              
+                              {rev.status !== 'Submited' && !isEditMode && (
+                                <button type="button" onClick={() => { setSelectedRevisionId(rev.id); setIsEditMode(true); }} className="mt-1 self-end py-1 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-md transition-colors">
+                                  Submit Ulang DL Ini
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {isEditMode && (
+                          <form onSubmit={handleResubmitSubmission} className="bg-white border border-indigo-200 rounded-xl p-4 space-y-3 text-left mt-4 shadow-sm">
                             <div className="flex justify-between items-center border-b pb-1.5">
-                              <span className="font-bold text-gray-700">Form Perubahan Berkas Perbaikan</span>
-                              <button type="button" onClick={() => setIsEditMode(false)} className="text-red-500 text-xs font-bold">Batal</button>
+                              <span className="font-bold text-indigo-950">Pembaruan Berkas Perbaikan</span>
+                              <button type="button" onClick={() => { setIsEditMode(false); setSelectedRevisionId(''); }} className="text-red-500 text-xs font-bold">Batal</button>
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-400 block mb-1">Nama Kegiatan</label>
@@ -548,7 +586,7 @@ export default function App() {
                               <input required type="number" value={editSubmission.nominal_pengajuan} onChange={(e) => setEditSubmission({...editSubmission, nominal_pengajuan: e.target.value})} className="w-full border p-1.5 text-xs rounded" />
                             </div>
                             <button type="submit" className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors">
-                              🚀 Saya Sudah Memperbaiki Berkas (Submit Ulang)
+                              🚀 Kirim Perbaikan untuk Poin Ini
                             </button>
                           </form>
                         )}
@@ -558,35 +596,31 @@ export default function App() {
                 </div>
               )}
 
-              {/* TIMELINE TRACKING LOG KAPAN DAN SUBMIT KEBERAPA */}
+              {/* TIMELINE TRACKING LOG */}
               <div className="mt-2 pt-4 border-t border-gray-100 space-y-2">
-                <span className="font-bold text-gray-500 uppercase block tracking-wider text-[10px]">Riwayat Urutan Aktivitas & Peninjauan</span>
-                <div className="bg-gray-50/70 rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                <span className="font-bold text-gray-500 uppercase block tracking-wider text-[10px]">Riwayat Urutan Aktivitas</span>
+                <div className="bg-gray-50/70 rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-40 overflow-y-auto">
                   {selectedItem.submission_logs && selectedItem.submission_logs.length > 0 ? (
                     selectedItem.submission_logs
-                      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Log terbaru di atas
+                      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
                       .map((log, index, arr) => (
                         <div key={log.id} className="p-3 flex justify-between items-start text-[11px]">
                           <div className="space-y-0.5 max-w-[75%]">
                             <p className="font-semibold text-gray-700">{log.note}</p>
-                            <p className="text-[10px] text-gray-400">
-                              {new Date(log.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-                            </p>
+                            <p className="text-[10px] text-gray-400">{new Date(log.created_at).toLocaleDateString('id-ID')} • {new Date(log.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})} WIB</p>
                           </div>
-                          <span className="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-mono text-[9px] font-bold">
-                            #{arr.length - index}
-                          </span>
+                          <span className="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-mono text-[9px] font-bold">#{arr.length - index}</span>
                         </div>
                       ))
                   ) : (
-                    <div className="p-4 text-center text-gray-400 text-xs">Belum ada catatan log aktivitas terdaftar.</div>
+                    <div className="p-4 text-center text-gray-400 text-xs">Belum ada catatan log.</div>
                   )}
                 </div>
               </div>
             </div>
 
             <div className="pt-4 border-t border-gray-100 flex gap-2">
-              <button onClick={() => { setSelectedItem(null); setIsEditMode(false); }} className="flex-1 py-2.5 font-medium border border-gray-200 rounded-xl hover:bg-gray-100 text-xs text-center">Tutup</button>
+              <button onClick={() => { setSelectedItem(null); setIsEditMode(false); setSelectedRevisionId(''); }} className="flex-1 py-2.5 font-medium border border-gray-200 rounded-xl hover:bg-gray-100 text-xs text-center">Tutup</button>
               {userRole === 'sa' && (
                 <button onClick={handleSaveChanges} className="flex-1 py-2.5 font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-xs shadow-xs">Simpan & Kirim WA</button>
               )}

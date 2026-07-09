@@ -22,7 +22,16 @@ export default function App() {
     pic_pembina: '',
     bph_kegiatan: '',
     cp_bph: '',
-    nominal_pengajuan: ''
+    nominal_pengajuan: '',
+    link_berkas: '' // Kolom pendukung link dokumen pengerjaan awal
+  });
+
+  // State Form Edit Khusus Mahasiswa saat Revisi/Submit Ulang
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editSubmission, setEditSubmission] = useState({
+    nama_kegiatan: '',
+    nominal_pengajuan: '',
+    link_berkas: ''
   });
 
   // State Array untuk Kelola UI Catatan Dinamis Kak Dinda
@@ -36,11 +45,11 @@ export default function App() {
     }
   }, [activeTab, userRole, isAuthenticated]);
 
-  // Sinkronisasi data list revisi saat item dipilih
+  // Sinkronisasi data saat item dipilih (baik untuk Kak Dinda maupun Mode Edit Mahasiswa)
   useEffect(() => {
     if (selectedItem) {
+      // Set data untuk Kak Dinda
       if (selectedItem.catatan_revisi) {
-        // Memetakan teks string kembali ke komponen baris pengerjaan UI
         setRevisionList([
           { 
             deadline: selectedItem.deadline_revisi || '', 
@@ -50,6 +59,15 @@ export default function App() {
       } else {
         setRevisionList([{ deadline: '', catatan: '' }]);
       }
+
+      // Set data awal untuk form edit mahasiswa
+      setEditSubmission({
+        nama_kegiatan: selectedItem.nama_kegiatan || '',
+        nominal_pengajuan: selectedItem.nominal_pengajuan || '',
+        link_berkas: selectedItem.link_berkas || ''
+      });
+    } else {
+      setIsEditMode(false);
     }
   }, [selectedItem]);
 
@@ -102,6 +120,7 @@ export default function App() {
           bph_kegiatan: newSubmission.bph_kegiatan,
           cp_bph: newSubmission.cp_bph,
           nominal_pengajuan: parseFloat(newSubmission.nominal_pengajuan) || 0,
+          link_berkas: newSubmission.link_berkas,
           status_proposal: 'On Progress',
           is_cair: false
         }
@@ -109,7 +128,7 @@ export default function App() {
 
       if (error) throw error;
       
-      setNewSubmission({ ormawa: '', nama_kegiatan: '', pic_pembina: '', bph_kegiatan: '', cp_bph: '', nominal_pengajuan: '' });
+      setNewSubmission({ ormawa: '', nama_kegiatan: '', pic_pembina: '', bph_kegiatan: '', cp_bph: '', nominal_pengajuan: '', link_berkas: '' });
       fetchSubmissions();
       alert('Pengajuan awal berhasil dikirim!');
     } catch (error) {
@@ -117,16 +136,20 @@ export default function App() {
     }
   };
 
-  // 2. FITUR SUBMIT ULANG (RESUBMIT/EDIT) OLEH MAHASISWA SETELAH REVISI
-  const handleResubmitSubmission = async () => {
+  // 2. FITUR EDIT & SUBMIT ULANG (RESUBMIT) OLEH MAHASISWA SETELAH REVISI Selesai
+  const handleResubmitSubmission = async (e) => {
+    e.preventDefault();
     if (!selectedItem) return;
 
     try {
       const currentSubmitCount = selectedItem.submission_logs ? selectedItem.submission_logs.length : 1;
       const nextSubmitNumber = currentSubmitCount + 1;
 
-      // Kembalikan status ke 'On Progress' & bersihkan info catatan lama di DB
+      // Update data isi berkas terbaru, kembalikan status ke 'On Progress', & bersihkan catatan revisi lama
       const updates = {
+        nama_kegiatan: editSubmission.nama_kegiatan,
+        nominal_pengajuan: parseFloat(editSubmission.nominal_pengajuan) || 0,
+        link_berkas: editSubmission.link_berkas,
         status_proposal: 'On Progress',
         catatan_revisi: null,
         deadline_revisi: null
@@ -145,13 +168,14 @@ export default function App() {
         .insert([
           { 
             submission_id: selectedItem.id, 
-            note: `Submit Ke-${nextSubmitNumber}: Berkas perbaikan telah dikirim ulang oleh Mahasiswa` 
+            note: `Submit Ke-${nextSubmitNumber}: Berkas perbaikan & data baru telah diperbarui oleh Mahasiswa` 
           }
         ]);
 
       if (logError) throw logError;
 
-      alert(`Berkas berhasil di-submit ulang sebagai pengajuan ke-${nextSubmitNumber}!`);
+      alert(`Berkas berhasil diperbarui dan di-submit ulang sebagai pengajuan ke-${nextSubmitNumber}!`);
+      setIsEditMode(false);
       setSelectedItem(null);
       fetchSubmissions();
     } catch (error) {
@@ -199,7 +223,7 @@ export default function App() {
         const tenggat = rev.deadline ? new Date(rev.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
         message += `${idx + 1}. *Poin Revisi:* ${deskripsi}\n   *Tenggat Waktu (DL):* ${tenggat}\n\n`;
       });
-      message += `Silakan buka dashboard website untuk melakukan *Submit Ulang* berkas perbaikan Anda.`;
+      message += `Silakan buka dashboard website untuk mengedit data dan melakukan *Submit Ulang* berkas perbaikan Anda.`;
     } else if (updatedStatus === 'On Progress') {
       message += `\nBerkas pengajuan Anda sedang dalam proses peninjauan kembali oleh Student Affairs.\n`;
     } else if (updatedStatus === 'Diterima') {
@@ -355,6 +379,10 @@ export default function App() {
                 <label className="text-xs text-gray-400 block mb-1">Nominal Dana</label>
                 <input required type="number" placeholder="Rp" value={newSubmission.nominal_pengajuan} onChange={(e) => setNewSubmission({...newSubmission, nominal_pengajuan: e.target.value})} className="w-full border border-gray-200 rounded-lg p-2 text-xs" />
               </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Link Tautan Berkas (Google Drive/OneDrive)</label>
+                <input required type="url" placeholder="https://drive.google.com/..." value={newSubmission.link_berkas} onChange={(e) => setNewSubmission({...newSubmission, link_berkas: e.target.value})} className="w-full border border-gray-200 rounded-lg p-2 text-xs" />
+              </div>
               <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-medium text-xs rounded-lg hover:bg-indigo-700 transition-colors shadow-xs">Kirim Berkas</button>
             </form>
           </div>
@@ -421,16 +449,19 @@ export default function App() {
       {/* PANEL SLIDE-OVER KANAN (Bisa Diakses Mahasiswa & Kak Dinda) */}
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-gray-900/20 backdrop-blur-xs" onClick={() => setSelectedItem(null)} />
+          <div className="absolute inset-0 bg-gray-900/20 backdrop-blur-xs" onClick={() => { setSelectedItem(null); setIsEditMode(false); }} />
           <div className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col border-l border-gray-200 p-6 space-y-5">
             <div>
               <span className="text-xs font-bold text-gray-400 uppercase">{selectedItem.ormawa}</span>
               <h3 className="text-base font-semibold text-gray-900">{selectedItem.nama_kegiatan}</h3>
               <p className="text-[11px] text-gray-400 mt-0.5">PIC: {selectedItem.bph_kegiatan} ({selectedItem.cp_bph})</p>
+              {selectedItem.link_berkas && (
+                <a href={selectedItem.link_berkas} target="_blank" rel="noreferrer" className="inline-block mt-2 text-xs bg-indigo-50 text-indigo-600 font-bold px-2 py-1 rounded hover:bg-indigo-100">🔗 Buka Tautan Berkas Dokumen</a>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 text-xs">
-              {/* JIKA USER ADALAH KAK DINDA (SA) -> VIEW EDITABLE */}
+              {/* JIKA USER ADALAH KAK DINDA (SA) -> VIEW EDITABLE STATUS */}
               {userRole === 'sa' ? (
                 <>
                   <div className="space-y-1.5">
@@ -480,7 +511,7 @@ export default function App() {
                   </div>
                 </>
               ) : (
-                /* JIKA USER ADALAH MAHASISWA -> VIEW READ-ONLY & FITUR SUBMIT ULANG */
+                /* JIKA USER ADALAH MAHASISWA -> VIEW DATA / FORM EDIT SUBMIT ULANG */
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
                     <div>
@@ -493,19 +524,42 @@ export default function App() {
                     </div>
 
                     {selectedItem.status_proposal === 'Need Revision' && (
-                      <div className="mt-2 pt-3 border-t border-gray-200 space-y-2">
-                        <span className="text-amber-800 block uppercase font-bold text-[10px] tracking-wide">⚠️ Detail Instruksi Perbaikan:</span>
+                      <div className="mt-2 pt-3 border-t border-gray-200 space-y-3">
+                        <span className="text-amber-800 block uppercase font-bold text-[10px] tracking-wide">⚠️ Detail Instruksi Perbaikan Dari Kak Dinda:</span>
                         <div className="p-3 bg-white border border-amber-100 rounded-lg">
                           <p className="font-medium text-gray-800">📌 {selectedItem.catatan_revisi || 'Ada revisi pada berkas berkas'}</p>
                           <p className="text-[11px] text-red-600 mt-2 font-bold">⏳ Batas Tenggat: {selectedItem.deadline_revisi ? new Date(selectedItem.deadline_revisi).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
                         </div>
                         
-                        {/* TOMBOL EDIT / SUBMIT ULANG MAHASISWA */}
-                        <div className="pt-2">
-                          <button onClick={handleResubmitSubmission} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors">
-                            🔄 Saya Sudah Memperbaiki Berkas (Submit Ulang)
+                        {/* TOGGLE TOMBOL EDIT BERKAS MAHASISWA */}
+                        {!isEditMode ? (
+                          <button onClick={() => setIsEditMode(true)} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors text-center">
+                            ✏️ Edit Data & Masukkan Berkas Baru
                           </button>
-                        </div>
+                        ) : (
+                          /* FORM FORMULIR EDIT JIKA MODE EDIT AKTIF */
+                          <form onSubmit={handleResubmitSubmission} className="bg-white border border-amber-200 rounded-xl p-4 space-y-3 text-left">
+                            <div className="flex justify-between items-center border-b pb-1.5">
+                              <span className="font-bold text-gray-700">Form Perubahan Berkas Perbaikan</span>
+                              <button type="button" onClick={() => setIsEditMode(false)} className="text-red-500 text-xs font-bold">Batal</button>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-1">Nama Kegiatan</label>
+                              <input required type="text" value={editSubmission.nama_kegiatan} onChange={(e) => setEditSubmission({...editSubmission, nama_kegiatan: e.target.value})} className="w-full border p-1.5 text-xs rounded" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-1">Nominal Pengajuan Dana</label>
+                              <input required type="number" value={editSubmission.nominal_pengajuan} onChange={(e) => setEditSubmission({...editSubmission, nominal_pengajuan: e.target.value})} className="w-full border p-1.5 text-xs rounded" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-1">Tautan Link Berkas Baru (Google Drive Perbaikan)</label>
+                              <input required type="url" value={editSubmission.link_berkas} onChange={(e) => setEditSubmission({...editSubmission, link_berkas: e.target.value})} placeholder="https://drive.google.com/..." className="w-full border p-1.5 text-xs rounded font-mono" />
+                            </div>
+                            <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors">
+                              🚀 Kirim Perbaikan & Submit Ulang Berkas
+                            </button>
+                          </form>
+                        )}
                       </div>
                     )}
                   </div>
@@ -540,7 +594,7 @@ export default function App() {
             </div>
 
             <div className="pt-4 border-t border-gray-100 flex gap-2">
-              <button onClick={() => setSelectedItem(null)} className="flex-1 py-2.5 font-medium border border-gray-200 rounded-xl hover:bg-gray-100 text-xs text-center">Tutup</button>
+              <button onClick={() => { setSelectedItem(null); setIsEditMode(false); }} className="flex-1 py-2.5 font-medium border border-gray-200 rounded-xl hover:bg-gray-100 text-xs text-center">Tutup</button>
               {userRole === 'sa' && (
                 <button onClick={handleSaveChanges} className="flex-1 py-2.5 font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-xs shadow-xs">Simpan & Kirim WA</button>
               )}

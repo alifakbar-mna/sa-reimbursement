@@ -425,7 +425,11 @@ export default function App() {
                         <td className="px-4 py-3.5 font-mono text-gray-400">{item.nomor_rf || '—'}</td>
                         <td className="px-4 py-3.5 text-right space-x-1.5">
                           <button onClick={() => setSelectedItem(item)} className="text-indigo-600 hover:text-indigo-900 font-bold bg-indigo-50 px-2 py-1 rounded">Detail</button>
-                          <button onClick={() => sendWhatsAppNotification(item, item.status_proposal, [{ catatan: item.catatan_revisi, deadline: item.deadline_revisi }])} className="text-emerald-600 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-1 rounded">💬 WA</button>
+                          
+                          {/* TOMBOL WA HANYA MUNCUL JIKA USER ADALAH KAK DINDA (SA) */}
+                          {userRole === 'sa' && (
+                            <button onClick={() => sendWhatsAppNotification(item, item.status_proposal, [{ catatan: item.catatan_revisi, deadline: item.deadline_revisi }])} className="text-emerald-600 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-1 rounded">💬 WA</button>
+                          )}
                         </td>
                       </tr>
                     );

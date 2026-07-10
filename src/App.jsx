@@ -163,12 +163,29 @@ export default function App() {
       // Jika semua sudah di-submit, status utama menjadi 'On Progress'. Jika belum, tetap 'Need Revision'.
       const nextGlobalStatus = allSubmitted ? 'On Progress' : 'Need Revision';
 
+      // PERBAIKAN LOGIKA DEADLINE UTAMA: 
+      // Ambil semua revisi yang MASIH 'Need Revision', lalu cari tanggal yang paling awal/terdekat.
+      const remainingRevisions = updatedRevisions.filter(r => r.status === 'Need Revision');
+      let nextGlobalDeadline = null;
+      
+      if (remainingRevisions.length > 0) {
+        // Urutkan berdasarkan tanggal terkecil (paling mendesak)
+        const sortedRemaining = remainingRevisions
+          .filter(r => r.deadline)
+          .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+        
+        nextGlobalDeadline = sortedRemaining[0]?.deadline || null;
+      } else {
+        // Jika semua sudah dikerjakan, ambil deadline dari poin revisi terakhir sebagai arsip
+        nextGlobalDeadline = updatedRevisions[updatedRevisions.length - 1]?.deadline || null;
+      }
+
       const updates = {
         nama_kegiatan: editSubmission.nama_kegiatan,
         nominal_pengajuan: parseFloat(editSubmission.nominal_pengajuan) || 0,
         status_proposal: nextGlobalStatus,
-        catatan_revisi: JSON.stringify(updatedRevisions), // Simpan array riwayat status revisi lengkap
-        deadline_revisi: updatedRevisions.find(r => r.status === 'Need Revision')?.deadline || updatedRevisions[0]?.deadline
+        catatan_revisi: JSON.stringify(updatedRevisions), 
+        deadline_revisi: nextGlobalDeadline // Sekarang ini akan dinamis mengikuti sisa revisi terdekat
       };
 
       const { error: updateError } = await supabase
@@ -178,7 +195,7 @@ export default function App() {
 
       if (updateError) throw updateError;
 
-      // Catat log pengerjaan submit ulang ke tabel submission_logs dengan detail info waktu & poin revisinya
+      // Catat log pengerjaan submit ulang ke tabel submission_logs
       const poinInfo = updatedRevisions[selectedRevisionIndex]?.catatan || '';
       const { error: logError } = await supabase
         .from('submission_logs')
@@ -270,9 +287,9 @@ export default function App() {
         resubmitted_at: r.resubmitted_at || null
       })).filter(r => r.deadline !== '' || r.catatan !== '');
 
-      const catatanGabungan = validRevisions.map(r => `[${r.status}] ${r.catatan}`).join('; ');
-      const deadlineUtama = validRevisions.find(r => r.status === 'Need Revision')?.deadline || validRevisions[0]?.deadline || null;
-
+      const remainingActive = validRevisions.filter(r => r.status === 'Need Revision');
+      const deadlineUtama = remainingActive.length > 0 ? remainingActive.sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0]?.deadline : (validRevisions[0]?.deadline || null);
+     
       // Jika Kak Dinda mengubah status utama ke "Need Revision" (revisi ulang), maka semua poin/status yang sebelumnya "Submitted" ikut diturunkan kembali menjadi "Need Revision"
       let finalRevisions = [...validRevisions];
       let statusProposalFinal = selectedItem.status_proposal;

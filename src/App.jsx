@@ -239,7 +239,7 @@ export default function App() {
         const deskripsi = rev.catatan || 'Tidak ada deskripsi';
         const tenggat = rev.deadline ? new Date(rev.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
         const statusRev = rev.status === 'Submitted' ? '✅ Sudah Perbaikan' : '⏳ Belum Direvisi';
-        message += `${idx + 1}. *Poin Revisi:* ${deskripsi}\n   *Tenggat Waktu (DL):* ${tenggat}\n   *Status Poin:* ${statusRev}\n\n`;
+        message += `${idx + 1}. *Poin Revisi:*\n   ${deskripsi}\n   *Tenggat Waktu (DL):* ${tenggat}\n   *Status Poin:* ${statusRev}\n\n`;
       });
       message += `Silakan buka dashboard website untuk melakukan penyesuaian data dan *Submit Ulang* berkas perbaikan Anda.`;
     } else if (updatedStatus === 'On Progress') {
@@ -250,7 +250,7 @@ export default function App() {
       message += `\nMohon maaf, berkas pengajuan Anda belum dapat kami setujui.\n`;
     }
 
-    message += `\n\nTerima kasih,\n*Student Affairs Finance Department*`;
+    message += `\n\nTerima kasih,\n*Student Affairs Department*`;
 
     const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
     window.open(url, '_blank'); 
